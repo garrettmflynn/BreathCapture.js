@@ -15,13 +15,14 @@ base_dir = '../' ## Example serves both templates and static files from the base
 debug = False
 
 config = {
-    'keyfile':'node_server/ssl/key.pem',
-    'certfile':'node_server/ssl/cert.pem',
-    'bind':host+':'+str(port)
+    'keyfile': 'node_server/ssl/key.pem',
+    'certfile': 'node_server/ssl/cert.pem',
+    'bind': f'{host}:{port}',
 }
 
+
 ## app available at http://localhost/7000
- 
+
 import sys
 import os
 import asyncio
@@ -108,10 +109,10 @@ async def get_resource(path):  # pragma: no cover
 async def dump_queue():
     ## For example: create a list
     templateString = "<ul>"
-    while(test_queue.empty() == False):
+    while (test_queue.empty() == False):
         data = await test_queue.get()
-        templateString += "<li>"+str(data)+"</li>"
-    
+        templateString += f"<li>{str(data)}</li>"
+
     templateString += "</ul>"
 
     return await render_template_string(templateString)
@@ -156,11 +157,10 @@ async def ws_receiver(websocket):
                 data = await websocket.receive() # any websocket-received data will be broadcasted to all connections
                 if data == 'nodejs': 
                     admin_addr = str(websocket.remote_addr)
-                    logging.info("Pong: Quart server client connected - " + str(data))
-                if data == 'kill':
-                    if str(websocket.remote_addr) == admin_addr:
-                        logging.info('kill command received')
-                        raise KeyboardInterrupt
+                    logging.info(f"Pong: Quart server client connected - {str(data)}")
+                if data == 'kill' and str(websocket.remote_addr) == admin_addr:
+                    logging.info('kill command received')
+                    raise KeyboardInterrupt
                 await broadcast(data) ## relay any received data back to all connections (test)
     except asyncio.CancelledError:
         # Handle disconnection here
@@ -189,7 +189,8 @@ def collect_websocket(func):
 @app.websocket('/')
 @collect_websocket ## Wrapper passes the new socket's queue in
 async def ws(queue):
-    if debug == True: logging.info('Quart:: socket request from IP: ' + str(websocket.remote_addr))
+    if debug == True:
+        logging.info(f'Quart:: socket request from IP: {str(websocket.remote_addr)}')
     await websocket.accept()
     transmitter = asyncio.create_task(ws_transmitter(websocket,queue)) ## transmitter task, process outgoing messages
     receiver = asyncio.create_task(ws_receiver(websocket))      ## receiver task, process incoming messages
@@ -246,8 +247,7 @@ async def sse():
             try:
                 data = await sse_queue.get()
                 event = ServerSentEvent(data)
-                encoded = event.encode()
-                yield encoded
+                yield event.encode()
             except asyncio.CancelledError:
                 connected_sse_clients.remove(sse_queue)
             except KeyboardInterrupt:
@@ -314,16 +314,16 @@ async def test_transmitter(num):
 ## on each loop run this function
 async def _thread_main(queue, ctr=0):
     
-    result = "Python thread loops: " + str(ctr) ## e.g. some operation
-    
+    result = f"Python thread loops: {str(ctr)}"
+
     ### Example: Broadcast thread results to all connected clients
     await broadcast(result)
 
     ## Example: Pass results to the message queue for pulling results on any thread
     await queue.put(result)
-    
+
     if debug == True: logging.info(result) # log result
-    
+
     return ctr+1 # for example
 
 
@@ -331,9 +331,10 @@ async def _thread_main(queue, ctr=0):
 async def _thread(queue, delay=2):
     try:
         ctr = 0
-        while True & threading.main_thread().is_alive(): ## This should quit if the main thread quits
-            if exit_event.is_set():
-                break
+        while (
+            True & threading.main_thread().is_alive()
+            and not exit_event.is_set()
+        ):
             ctr = await _thread_main(queue, ctr)         ## Run the thread operation
             await asyncio.sleep(delay)                   ## Release the task on the thread event loop till next iteration
     except (KeyboardInterrupt, asyncio.CancelledError):
@@ -410,27 +411,23 @@ async def shutdown():
 
 
 
-if production == True:
-
-    if __name__ == "__main__":
+if __name__ == "__main__":
+    if production == True:
         try:
             asyncio.run(serve(app, Config.from_mapping(config)))
             #asyncio.run(serve(app, Config.from_mapping(config)))
         except (KeyboardInterrupt, asyncio.CancelledError):
             logging.info("Ended")
 
-        sys.exit(0)
-    
-else: 
-    if __name__ == "__main__":       
+    else:
         ## FOR DEBUGGING WITH HTTP AND LIVE RELOAD
         ## MAIN, THIS IS WHAT RUNS
         try:
             app.run(host=host, port=port) # run the quart server
         except asyncio.CancelledError:
             logging.info("Ended")
-    
-        sys.exit(0)
+
+    sys.exit(0)
     ####
 
 
